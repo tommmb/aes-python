@@ -14,18 +14,6 @@ from re import search
 from os.path import basename
 
 
-def main():
-    db = connector.connect(
-        host="localhost",
-        user="root",
-        passwd="root",
-        database='project'
-    )
-
-    root = App()
-    root.mainloop()
-
-
 class App(Tk):
     def __init__(self):
         self.grey = '#CDCDCD'
@@ -298,6 +286,18 @@ class Account:
         self.email = email
         self.first_name = first_name
         self.last_name = last_name
+
+
+def main():
+    db = connector.connect(
+        host="localhost",
+        user="root",
+        passwd="root",
+        database='project'
+    )
+
+    root = App()
+    root.mainloop()
 
 
 if __name__ == '__main__':
