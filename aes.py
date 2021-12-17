@@ -232,7 +232,7 @@ class AES:
     
 def main():
     key = [0x8d, 0xe, 0xd8, 0x9f, 0x3f, 0x44, 0x59, 0xd0, 0x46, 0x69, 0xe3, 0xbf, 0x1c, 0xe7, 0x40, 0xee]
-    text = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+    text = 'the text to be encrypted'
     ciphertext = AES(key).encrypt(text)
     
     
