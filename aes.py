@@ -1,3 +1,5 @@
+from os import urandom
+
 s_box = (
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
     0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
@@ -41,6 +43,7 @@ r_con = (
     0x80, 0x1B, 0x36, 0x6C, 0xD8, 0xAB, 0x4D, 0x9A
 )
 
+
 class AES:
     def __init__(self, master_key):
         assert len(master_key) == 16
@@ -67,7 +70,42 @@ class AES:
         key_columns = [key_columns[i: i + 4] for i in range(0, 44, 4)]
         return key_columns
 
-    def encrypt(self, plaintext):
+    def encrypt_block(self, plaintext):
+        assert len(plaintext) == 16
+        plain_state = self._bytes_to_matrix(plaintext)
+
+        self._add_round_key(plain_state, self._round_keys[0])
+        for i in range(1, self._rounds):
+            self._sub_bytes(plain_state)
+            self._shift_rows(plain_state)
+            self._mix_columns(plain_state)
+            self._add_round_key(plain_state, self._round_keys[i])
+
+        self._sub_bytes(plain_state)
+        self._shift_rows(plain_state)
+        self._add_round_key(plain_state, self._round_keys[-1])
+
+        return self._matrix_to_bytes(plain_state)
+
+    def decrypt_block(self, ciphertext):
+        assert len(ciphertext) == 16
+
+        cipher_state = self._bytes_to_matrix(ciphertext)
+
+        self._add_round_key(cipher_state, self._round_keys[-1])
+        self._inv_shift_rows(cipher_state)
+        self._inv_sub_bytes(cipher_state)
+        for j in range(self._rounds - 1, 0, -1):
+            self._add_round_key(cipher_state, self._round_keys[j])
+            self._inv_mix_columns(cipher_state)
+            self._inv_shift_rows(cipher_state)
+            self._inv_sub_bytes(cipher_state)
+        self._add_round_key(cipher_state, self._round_keys[0])
+
+        return self._matrix_to_bytes(cipher_state)
+
+
+    def encrypt_ecb(self, plaintext):
         if len(plaintext) != 16:
             plaintext = AES._pad(self, plaintext)
         blocks = self._split_blocks(plaintext)
@@ -87,9 +125,10 @@ class AES:
             encrypted_blocks[i] = self._matrix_to_bytes(plain_state)
         return [encrypted_blocks[i][j] for i in range(len(blocks)) for j in range(16)]
 
-    def decrypt(self, ciphertext):
-        if len(ciphertext) % 16 != 0:
-            ciphertext = self._pad(ciphertext)
+
+    def decrypt_ecb(self, ciphertext):
+        self._pad(ciphertext)
+    
         blocks = self._split_blocks(ciphertext)
         blocks = [self._bytes_to_matrix(self._split_blocks(ciphertext)[i]) for i in range(len(blocks))]
         encrypted_blocks = [list("") for i in range(len(blocks))]
@@ -108,6 +147,49 @@ class AES:
         unpadded = AES._unpad(self, encrypted_blocks[-1])
         return [encrypted_blocks[i][j] for i in range(len(blocks) - 1) for j in range(16)] + unpadded
 
+    def xor(self, a, b):
+        assert len(a) == len(b)
+        return [a[i] ^ b[i] for i in range(len(a))]
+
+    def encrypt_cbc(self, plaintext, iv):
+        """ CBC Encryption:
+        Encrypt (block[i] ^ previous)
+        """
+        assert len(iv) == 16
+        plaintext = self._pad(plaintext)
+
+        blocks = self._split_blocks(plaintext)
+        encrypted_blocks = []
+        previous = iv
+
+        for i in range(len(blocks)):
+            plaintext = self.xor(blocks[i], previous)
+            encrypted_block = self.encrypt_block(plaintext)
+            encrypted_blocks.append(encrypted_block)
+            previous = encrypted_block
+
+        return [encrypted_blocks[i][j] for i in range(2) for j in range(len(plaintext))]
+
+    def decrypt_cbc(self, ciphertext, iv):
+        """ CBC Decryption
+        previous ^ decrypt(ciphertext)
+        """
+        assert len(iv) == 16
+
+        blocks = self._split_blocks(ciphertext)
+        decrypted_blocks = []
+
+        previous = iv
+
+        for i in range(len(blocks)):
+            ciphertext = self.decrypt_block(blocks[i])
+            decrypted_block = self.xor(ciphertext, previous)
+            decrypted_blocks.append(decrypted_block)
+            previous = blocks[i]
+
+        return [decrypted_blocks[i][j] for i in range(2) for j in range(len(ciphertext))]
+
+
     def _bytes_to_matrix(self, b):
         temp = [[0 for x in range(4)] for x in range(4)]  # empty 4x4 array
         for i in range(0, 16, 4):
@@ -116,11 +198,11 @@ class AES:
         return temp
 
     def _matrix_to_bytes(self, matrix):
-        b = [None for i in range(16)]
+        b = []
         index = 0
         for i in range(4):
             for j in range(4):
-                b[index] = matrix[i][j]
+                b.append(matrix[i][j])
                 index += 1
         return b
 
@@ -228,13 +310,14 @@ class AES:
 
     def _split_blocks(self, text):
         return [text[i: i + 16] for i in range(0, len(text), 16)]
-    
-    
+
+
 def main():
     key = [0x8d, 0xe, 0xd8, 0x9f, 0x3f, 0x44, 0x59, 0xd0, 0x46, 0x69, 0xe3, 0xbf, 0x1c, 0xe7, 0x40, 0xee]
-    text = 'the text to be encrypted'
-    ciphertext = AES(key).encrypt(text)
-    
-    
+    text = 'Text to be encrypted'
+    iv = urandom(16)
+    ciphertext = AES(key).encrypt_cbc(text, iv)
+
+
 if __name__ == '__main__':
     main()
