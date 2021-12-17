@@ -1,4 +1,9 @@
 # aes-python
 
-AES-128 implementation in pure Python. 
-Currently only supports ECB mode of operation.
+This is an exercise in secure symmetric key encryption, implemented in pure Python.
+
+Currently only supports ECB mode, which is deterministic and not should not be used.
+
+
+TODO:
+Add CBC mode
