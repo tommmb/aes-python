@@ -47,6 +47,7 @@ r_con = (
 class AES:
     def __init__(self, master_key):
         assert len(master_key) == 16
+
         self._master_key = master_key
         self._rounds = 10
         self._round_keys = self._expand_key(master_key)
@@ -61,20 +62,27 @@ class AES:
                 word.append(word.pop(0))  # circular left shift 1 byte
                 for x in range(4):
                     word[x] = s_box[word[x]]  # s_box substitution
+
                 word[0] ^= r_con[i]
                 i += 1
+
             word2 = key_columns[-4]
+
             for x in range(4):
                 word[x] ^= word2[x]
+
             key_columns.append(word)
+
         key_columns = [key_columns[i: i + 4] for i in range(0, 44, 4)]
+
         return key_columns
 
     def encrypt_block(self, plaintext):
         assert len(plaintext) == 16
-        plain_state = self._bytes_to_matrix(plaintext)
 
+        plain_state = self._bytes_to_matrix(plaintext)
         self._add_round_key(plain_state, self._round_keys[0])
+
         for i in range(1, self._rounds):
             self._sub_bytes(plain_state)
             self._shift_rows(plain_state)
@@ -89,62 +97,70 @@ class AES:
 
     def decrypt_block(self, ciphertext):
         assert len(ciphertext) == 16
-
         cipher_state = self._bytes_to_matrix(ciphertext)
-
         self._add_round_key(cipher_state, self._round_keys[-1])
         self._inv_shift_rows(cipher_state)
         self._inv_sub_bytes(cipher_state)
+
         for j in range(self._rounds - 1, 0, -1):
             self._add_round_key(cipher_state, self._round_keys[j])
             self._inv_mix_columns(cipher_state)
             self._inv_shift_rows(cipher_state)
             self._inv_sub_bytes(cipher_state)
+
         self._add_round_key(cipher_state, self._round_keys[0])
 
         return self._matrix_to_bytes(cipher_state)
 
-
     def encrypt_ecb(self, plaintext):
         if len(plaintext) != 16:
             plaintext = AES._pad(self, plaintext)
+
         blocks = self._split_blocks(plaintext)
         blocks = [self._bytes_to_matrix(self._split_blocks(plaintext)[i]) for i in range(len(blocks))]
         encrypted_blocks = [list("") for i in range(len(blocks))]
+
         for i in range(len(blocks)):
             plain_state = blocks[i]
             self._add_round_key(plain_state, self._round_keys[0])
+
             for j in range(1, self._rounds):
                 self._sub_bytes(plain_state)
                 self._shift_rows(plain_state)
                 self._mix_columns(plain_state)
                 self._add_round_key(plain_state, self._round_keys[j])
+
             self._sub_bytes(plain_state)
             self._shift_rows(plain_state)
             self._add_round_key(plain_state, self._round_keys[-1])
             encrypted_blocks[i] = self._matrix_to_bytes(plain_state)
-        return [encrypted_blocks[i][j] for i in range(len(blocks)) for j in range(16)]
 
+        return [encrypted_blocks[i][j] for i in range(len(blocks)) for j in range(16)]
 
     def decrypt_ecb(self, ciphertext):
         self._pad(ciphertext)
-    
+
         blocks = self._split_blocks(ciphertext)
         blocks = [self._bytes_to_matrix(self._split_blocks(ciphertext)[i]) for i in range(len(blocks))]
         encrypted_blocks = [list("") for i in range(len(blocks))]
+
         for i in range(len(blocks)):
             cipher_state = blocks[i]
             self._add_round_key(cipher_state, self._round_keys[-1])
             self._inv_shift_rows(cipher_state)
             self._inv_sub_bytes(cipher_state)
+
             for j in range(self._rounds - 1, 0, -1):
                 self._add_round_key(cipher_state, self._round_keys[j])
                 self._inv_mix_columns(cipher_state)
                 self._inv_shift_rows(cipher_state)
                 self._inv_sub_bytes(cipher_state)
+
             self._add_round_key(cipher_state, self._round_keys[0])
             encrypted_blocks[i] = self._matrix_to_bytes(cipher_state)
+
         unpadded = AES._unpad(self, encrypted_blocks[-1])
+
         return [encrypted_blocks[i][j] for i in range(len(blocks) - 1) for j in range(16)] + unpadded
 
     def xor(self, a, b):
@@ -168,7 +184,7 @@ class AES:
             encrypted_blocks.append(encrypted_block)
             previous = encrypted_block
 
-        return [encrypted_blocks[i][j] for i in range(2) for j in range(len(plaintext))]
+        return [encrypted_blocks[i][j] for i in range(len(blocks)) for j in range(len(plaintext))]
 
     def decrypt_cbc(self, ciphertext, iv):
         """ CBC Decryption
@@ -187,8 +203,9 @@ class AES:
             decrypted_blocks.append(decrypted_block)
             previous = blocks[i]
 
-        return [decrypted_blocks[i][j] for i in range(2) for j in range(len(ciphertext))]
+        unpadded = self._unpad(decrypted_blocks[-1])
 
+        return [decrypted_blocks[i][j] for i in range(len(blocks) - 1) for j in range(len(ciphertext))] + unpadded
 
     def _bytes_to_matrix(self, b):
         temp = [[0 for x in range(4)] for x in range(4)]  # empty 4x4 array
@@ -246,7 +263,8 @@ class AES:
         02 03 01 01
         01 02 03 01
         01 01 02 03
-        03 01 01 02        c0 = (2 * c[0]) ^ (3 * c[1]) ^ (1 * c[2]) ^ (1 * c[3])  """
+        03 01 01 02
+        c0 = (2 * c[0]) ^ (3 * c[1]) ^ (1 * c[2]) ^ (1 * c[3])  """
         c0 = self._mul2(c[0]) ^ self._mul3(c[1]) ^ c[2] ^ c[3]
         c1 = c[0] ^ self._mul2(c[1]) ^ self._mul3(c[2]) ^ c[3]
         c2 = c[0] ^ c[1] ^ self._mul2(c[2]) ^ self._mul3(c[3])
@@ -280,7 +298,6 @@ class AES:
         09 0E 0B 0D  =   9 14 11 13
         0D 09 0E 0B     13  9 14 11
         0B 0D 09 0E     11 13  9 14
-
         c0 = (14 * c[0]) ^ (11 * c[1]) ^ (13 * c[2]) ^ (9 * c[3])   """
         c0 = self._mul_14(c[0]) ^ self._mul_11(c[1]) ^ self._mul_13(c[2]) ^ self._mul_9(c[3])
         c1 = self._mul_9(c[0]) ^ self._mul_14(c[1]) ^ self._mul_11(c[2]) ^ self._mul_13(c[3])
@@ -294,8 +311,7 @@ class AES:
             self._inv_mix_column(column)
 
     def _pad(self, text):
-        """ converts string plaintext to int array
-         pads to length of 16 bytes """
+        """ converts string plaintext to int array and pads to length of 16 bytes """
         text = [ord(text[i]) for i in range(len(text))]
         pad_length = 16 - (len(text) % 16)
         padding = [pad_length] * pad_length
